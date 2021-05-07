@@ -1,0 +1,334 @@
+use ::DialogWizard/BBDialog.bbj::BBDialog
+use ::DialogWizard/DialogUtils.bbj::DialogUtils
+use ::DialogWizard/DialogWizardRun.bbj::DialogWizardRun
+rem /** DLGWIZ_OPTION_BEGIN("translator") **/
+rem use ::translations/bbtranslator.bbj::BBTranslator
+rem /** DLGWIZ_OPTION_END("translator") **/
+use ::bbwindowutils.bbj::BBWindowUtils
+use com.google.gson.JsonArray
+use com.google.gson.JsonParser
+use java.util.HashMap
+use ::Login_Auth.bbj::SAMLUser
+
+class public SamlLoginViewer extends BBDialog
+
+    field protected BBjAPI        API! = BBjAPI()
+    field protected BBjNumber     TRUE = #API!.TRUE
+    field protected BBjNumber     FALSE = #API!.FALSE
+    field protected BBjSysGui     SysGui! = #API!.openSysGui("X0")
+    field protected BBjThinClient ThinClient! = #API!.getThinClient()
+    field protected BBjString     ClientLocale$ = #ThinClient!.getClientLocale()
+    field protected BBjString     PgmDirectory$ = pgm(-2)(1,max(pos("\"=pgm(-2),-1),pos("/"=pgm(-2),-1)))
+    
+    rem /** DLGWIZ_OPTION_BEGIN("translator") **/
+    rem field protected BBTranslator  Translator! = BBTranslator.getInstance("Message",#ClientLocale$,"en",#PgmDirectory$)
+    rem /** DLGWIZ_OPTION_END("translator") **/
+    
+    field protected BBjNamespace  GroupNS! = #API!.getGroupNamespace()
+    field protected BBjMDI        MDI!
+
+    field public BBjString traceDir$
+    field public BBjString traceMode$
+    field public BBjNumber traceChan
+    field public BBjString traceFile$
+    field public BBjString URL$
+
+	rem /** DLGWIZ_RES SamlLoginViewer.arc 101 **/
+
+	rem /** DLGWIZ_FLD_BEGIN **/
+	rem /** DLGWIZ_FLD_END **/
+
+
+	rem /** DLGWIZ_FLC_BEGIN **/
+	field protected BBjTopLevelWindow C_Window101!
+	rem /** DLGWIZ_FLC_END **/
+
+
+    field public BBjTopLevelWindow Wnd!
+    
+    field public BBjButton btn!
+    field public BBjHtmlView htmlview!
+    field public SAMLUser samlUser!
+
+    rem /**
+    rem * Constructor SamlLoginViewer
+    rem */
+    method public SamlLoginViewer()
+        #super!("SamlLoginViewer.arc",101)
+
+        rem Check if BBjSysGui object is still valid. If not re-create it.
+        #SysGui!.getContext(err=*next); sg_ok=1
+        if !sg_ok then
+            #SysGui!=#API!.openSysGui("X0")
+        endif
+
+        if stbl("+USER_LOCALE",err=*endif)<>"" then
+            #ClientLocale$ = stbl("+USER_LOCALE")
+            rem /** DLGWIZ_OPTION_BEGIN("translator") **/
+            rem #Translator! = BBTranslator.getInstance("SamlLoginViewer",#ClientLocale$,"en",#PgmDirectory$)
+            rem /** DLGWIZ_OPTION_END("translator") **/
+        endif
+
+        #Wnd!=#super!.getWndTop()
+        if #API!.isInMDI() then #MDI!=#API!.getMDI()
+        #C_Window101! = cast(BBjTopLevelWindow,#super!.getControlByName("Window101"))
+        if #Wnd!<>null() then
+            #initToolBar()
+            #setCallbacks()
+        endif
+    methodend
+
+    rem /**
+    rem * Method initToolBar:
+    rem * Setup toolbar
+    rem */
+    method protected void initToolBar()
+	    
+    methodend
+
+    rem /**
+    rem * Method setCallbacks:
+    rem * Set control callbacks
+    rem */
+    method protected void setCallbacks()
+        if #API!.isInMDI() then #MDI!.registerMDIClosingCallback(#this!,"onMDIClosing")
+        #GroupNS!.setCallbackForVariableChange("debug_mode",#this!,"doDebugTrace")
+        #GroupNS!.setCallbackForVariableChange("trace_mode",#this!,"doDebugTrace")
+		rem /** DLGWIZ_CBS_BEGIN **/
+		#super!.getControlByName("Window101").setCallback(BBjAPI.ON_CLOSE,#this!,"Window101__ON_CLOSE")
+		#super!.getControlByName("Window101").setCallback(BBjAPI.ON_RESIZE,#this!,"Window101__ON_RESIZE")
+		rem /** DLGWIZ_CBS_END **/
+
+    methodend
+
+    rem /**
+    rem * Method doDataExchange:
+    rem * Set controls with program variables
+    rem * @param BBjNumber pInitFlag: Controls are initialized, if true
+    rem */
+    method protected void doDataExchange(BBjNumber pInitFlag)
+		rem /** DLGWIZ_DDX_BEGIN **/
+		rem /** DLGWIZ_DDX_END **/
+
+    methodend
+
+    rem /**
+    rem * Method doModal:
+    rem * Initialize and display dialog (contains PROCESS_EVENTS)
+    rem * @see doDataExchange(BBjNumber pInitFlag)
+    rem * @see onInitDialog()
+    rem * @see onExitDialog()
+    rem * @return BBjNumber Answer: 0=Passed required fields check, 1=Dialog canceled/closed
+    rem */
+    method public BBjNumber doModal()
+
+        #API!.setCustomEventCallback("ReturnAnswer","do_return")
+        #API!.setCustomEventCallback("CancelAnswer","do_cancel")
+
+        #doDataExchange(#TRUE)
+        #super!.setAllValidated(#TRUE)
+
+        #onInitDialog()
+        #Wnd!.setVisible(#TRUE)
+
+        do_process_events:
+            process_events,err=*same
+
+        do_return:
+            #doDataExchange(#FALSE)
+            if #super!.getAllValidated()=0 then
+                #super!.setAllValidated(#TRUE)
+                goto do_process_events
+            endif
+
+        do_cancel:
+            #onExitDialog()
+            #Wnd!.destroy()
+
+        methodret #super!.getAnswer()
+    methodend
+
+    rem /**
+    rem * Method onInitDialog:
+    rem * Your custom initialization
+    rem */
+    method public void onInitDialog()
+        
+    	rem /** DLGWIZ_INI_BEGIN **/
+    	#C_Window101! = cast(BBjTopLevelWindow,#super!.getControlByName("Window101"))
+    	rem /** DLGWIZ_INI_END **/
+    	
+    	userhome! = System@.getProperty("user.home")
+        chromium_switches$ = ""
+        if userhome!<>null() then
+          server$ = bbjapi().getInterpreterServer().getServerName()
+          chromium_dir$ = userhome! + "/chromium-" + server$
+          print stbl("!CHROMIUM_DIR",chromium_dir$)
+          chromium_user_dir$ = userhome! + "/chromium-user-" + server$
+          chromium_switches$ = "--user-data-dir="+chromium_user_dir$
+          print "chromium_switches=",chromium_switches$
+        endif
+    	
+    	#URL$ = "http://localhost:8888/SamlContext/SamlLoginServlet/"
+        #htmlview! = #C_Window101!.addHtmlView(151,10,50,800,700,"",$$,chromium_switches$)
+        #htmlview!.setUrl(#URL$)
+        #htmlview!.setCallback(BBjAPI.ON_NATIVE_JAVASCRIPT,#this!, "onLoginCallback")
+
+        #doDebugTrace(null())
+    methodend
+    
+    method public void onLoginCallback(BBjNativeJavaScriptEvent event!)
+        
+        map! = event!.getEventMap()
+        detail$=map!.get("detail")
+        detail! = new org.json.JSONObject(detail$)
+        user$=detail!.get("username")
+        
+        jsonParser! = new JsonParser().parse(user$)
+        #samlUser! = new SAMLUser(jsonParser!)
+        
+        a=msgbox(#samlUser!.getUser(),0,"Result")
+        a=msgbox(#samlUser!.getEmail(),0,"Result")
+        a=msgbox(str(#samlUser!.getRole()),0,"Result")
+        #htmlview!.destroy()
+       #postReturnAnswer()
+      
+    methodend
+    
+
+    rem /**
+    rem * Method onExitDialog:
+    rem * Your custom exit code
+    rem */
+    method public void onExitDialog()
+    	rem /** DLGWIZ_OPTION_BEGIN("translator") **/
+        rem #Translator!.getTranslationBundle().save()
+        rem /** DLGWIZ_OPTION_END("translator") **/
+        if #traceChan then
+            call "bbtracer.bbj::stopTrace",#traceChan
+            call "bbtracer.bbj::showTrace",#traceFile$,#traceMode$
+        endif
+    methodend
+
+    rem /**
+    rem * Method postCancelAnswer:
+    rem * Set dialog answer to "canceled"
+    rem */
+    method public void postCancelAnswer()
+        #super!.setAnswer(0)
+        #API!.postCustomEvent("CancelAnswer",null())
+    methodend
+
+    rem /**
+    rem * Method postReturnAnswer:
+    rem * Set dialog answer to "normal return"
+    rem */
+    method public void postReturnAnswer()
+        #super!.setAnswer(1)
+        #API!.postCustomEvent("ReturnAnswer",null())
+    methodend
+
+    rem /**
+    rem * Method onMDIClosing:
+    rem * Handler for the MDI closing
+    rem */
+    method public void onMDIClosing(BBjMDIClosingEvent pEvent!)
+        rem uncomment the next line to veto the MDI Close
+        rem #MDI!.vetoMDIClose()
+        #MDI!.approveMDIClose()
+        #postCancelAnswer()
+    methodend
+
+    rem /**
+    rem * Method doDebugTrace:
+    rem * Show/hide console, start/stop trace
+    rem * @param BBjNamespaceEvent event! 
+    rem */
+    method public void doDebugTrace(BBjNamespaceEvent event!)
+        debug_mode = #GroupNS!.getValue("debug_mode",err=*next)>0
+        trace_mode = #GroupNS!.getValue("trace_mode",err=*next)>0
+
+        if debug_mode then
+            seterr 0
+            setesc 0
+            print(0)'show'
+        else
+            print(0)'hide'
+        endif
+
+        if trace_mode then
+            traceDir$=#traceDir$, traceMode$=#traceMode$, traceChan=#traceChan, traceFile$=#traceFile$
+            call "bbtracer.bbj::startTrace",traceDir$,traceMode$,traceChan,traceFile$
+            #traceDir$=traceDir$, #traceMode$=traceMode$, #traceChan=traceChan, #traceFile$=traceFile$
+        else
+            if #traceChan then
+                traceChan=#traceChan
+                call "bbtracer.bbj::stopTrace",traceChan
+                #traceChan=traceChan
+                call "bbtracer.bbj::showTrace",#traceFile$,#traceMode$
+            endif
+        endif
+    methodend
+    
+    rem /** DLGWIZ_OPTION_BEGIN("toolbar[Maintenance Form]") **/
+    
+    rem /** DLGWIZ_OPTION_END("toolbar[Maintenance Form]") **/
+    
+    rem /** DLGWIZ_OPTION_BEGIN("toolbar[Maintenance Grid]") **/
+    
+    rem /** DLGWIZ_OPTION_END("toolbar[Maintenance Grid]") **/
+    
+    rem /** DLGWIZ_OPTION_BEGIN("toolbar[Header Detail]") **/
+    
+    rem /** DLGWIZ_OPTION_END("toolbar[Header Detail]") **/
+    
+    rem /** DLGWIZ_OPTION_BEGIN("toolbar[Options Entry Form]") **/
+	
+    rem /** DLGWIZ_OPTION_END("toolbar[Options Entry Form]") **/
+    
+    rem /** DLGWIZ_OPTION_BEGIN("toolbar[Options Entry Grid]") **/
+  
+    rem /** DLGWIZ_OPTION_END("toolbar[Options Entry Grid]") **/
+    
+
+	rem /**
+	rem  * Method Window101__ON_CLOSE: 
+	rem  * Event handler for the ON_CLOSE event for Window101
+	rem  * @param BBjCloseEvent
+	rem  */
+	method public void Window101__ON_CLOSE(BBjCloseEvent pEvent!)
+		#postCancelAnswer()
+	methodend
+
+	rem /**
+	rem  * Method Window101__ON_RESIZE: 
+	rem  * Event handler for the ON_RESIZE event for Window101
+	rem  * @param BBjResizeEvent
+	rem  */
+	method public void Window101__ON_RESIZE(BBjResizeEvent pEvent!)
+		rem TODO Auto-generated method stub
+	methodend
+
+classend
+
+
+declare SamlLoginViewer myDialog!
+myDialog! = new SamlLoginViewer()
+
+rem /** DLGWIZ_SET_BEGIN **/
+rem /** DLGWIZ_SET_END **/
+
+
+if myDialog!.doModal() and info(3,6)<>"5" then
+    print 'show',
+    print "Passed required fields check"
+rem /** DLGWIZ_GET_BEGIN **/
+rem /** DLGWIZ_GET_END **/
+
+    input "Press ENTER to release",dummy$
+else
+    input "Unsuccessful", *
+endif
+
+
+release

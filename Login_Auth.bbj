@@ -1,0 +1,84 @@
+
+use com.google.api.client.googleapis.auth.oauth2.GoogleIdToken
+use com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier
+use ::googleAuthLoginView.bbj::googleAuthLoginView
+use com.google.gson.JsonArray
+use com.google.gson.JsonParser
+use com.google.gson.JsonObject
+
+interface public IAuthUser
+    method public BBjString getUser()
+    method public BBjString getEmail()
+    method public BBjVector getRole()
+interfaceend
+
+class public GoogleUser implements IAuthUser
+    field public GoogleIdToken.Payload payLoad!
+    declare BBjVector userRole!
+    method public GoogleUser(GoogleIdToken.Payload payload!)
+        if samlJson! <> NULL() then
+            #payLoad! = payload!
+        else
+            throw "Data Not Found",999 
+        endif
+    methodend
+    
+    method public BBjString getUser()
+        methodret #payLoad!.get("name")
+    methodend
+    
+    method public BBjString getEmail()
+        methodret payLoad!.getEmail()
+    methodend
+    
+    method public BBjVector getRole()
+        userRole! = new BBjVector()
+        userRole!.addItem(NULL)
+        methodret userRole!
+    methodend
+    
+classend
+
+class public SAMLUser implements IAuthUser
+    
+    field public JsonObject samlJsonData!
+    
+    method public SAMLUser(JsonObject samlJson!)
+        if samlJson! <> NULL() then
+            #samlJsonData! = samlJson!
+        else
+            throw "Data Not Found",999 
+        endif
+        
+    methodend
+    
+    method public BBjString getUser()
+        userObject! = #samlJsonData!.get("urn:oid:2.16.840.1.113730.3.1.241")
+        it! = userObject!.iterator()
+        while it!.hasNext()
+            rec! = it!.next()
+        wend
+        methodret str(rec!)
+    methodend
+    
+    method public BBjString getEmail()
+        userObject! = #samlJsonData!.get("urn:oasis:names:tc:SAML:attribute:subject-id")
+        it! = userObject!.iterator()
+        while it!.hasNext()
+            rec! = it!.next()
+        wend
+        methodret str(rec!)
+    methodend
+    
+    method public BBjVector getRole()
+        userRole! = new BBjVector()
+        roleObject! = #samlJsonData!.get("https://samltest.id/attributes/role")
+        it! = roleObject!.iterator()
+        while it!.hasNext()
+            rec! = it!.next()
+            userRole!.addItem(rec!)
+        wend
+        methodret userRole!
+    methodend
+    
+classend

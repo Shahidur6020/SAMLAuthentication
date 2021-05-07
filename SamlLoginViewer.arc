@@ -1,0 +1,9 @@
+//#charset: UTF-8
+
+VERSION "4.0"
+
+WINDOW 101 "" 200 200 600 400
+BEGIN
+    EVENTMASK 0
+    NAME "Window101"
+END
