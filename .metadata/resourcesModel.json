@@ -28,15 +28,6 @@
         "mediaType": "application/vnd.businessbasic.bbj",
         "resourceType": "file"
       },
-      "res": {
-        "sourcePath": true,
-        "resourceType": "folder"
-      },
-      "res/index.html": {
-        "sourcePath": false,
-        "mediaType": "text/html",
-        "resourceType": "file"
-      },
       "Login_Auth.bbj": {
         "sourcePath": true,
         "mediaType": "application/vnd.businessbasic.bbj",
