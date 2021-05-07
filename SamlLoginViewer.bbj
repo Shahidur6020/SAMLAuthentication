@@ -8,7 +8,7 @@ use ::bbwindowutils.bbj::BBWindowUtils
 use com.google.gson.JsonArray
 use com.google.gson.JsonParser
 use java.util.HashMap
-use ::Login_Auth.bbj::SAMLUser
+REM use ::Login_Auth.bbj::SAMLUser
 
 class public SamlLoginViewer extends BBDialog
 
@@ -48,7 +48,7 @@ class public SamlLoginViewer extends BBDialog
     
     field public BBjButton btn!
     field public BBjHtmlView htmlview!
-    field public SAMLUser samlUser!
+   REM  field public SAMLUser samlUser!
 
     rem /**
     rem * Constructor SamlLoginViewer
@@ -185,14 +185,17 @@ class public SamlLoginViewer extends BBDialog
         user$=detail!.get("username")
         
         jsonParser! = new JsonParser().parse(user$)
-        #samlUser! = new SAMLUser(jsonParser!)
+        if jsonParser! <> NULL() then
+              a=msgbox(#samlUser!.getUser(),0,"Result")
+              a=msgbox(#samlUser!.getEmail(),0,"Result")
+              a=msgbox(str(#samlUser!.getRole()),0,"Result")
+              #htmlview!.destroy()
+             #postReturnAnswer()
+        else
+            throw "Data Not Found",999 
+        endif
+        REM #samlUser! = new SAMLUser(jsonParser!)
         
-        a=msgbox(#samlUser!.getUser(),0,"Result")
-        a=msgbox(#samlUser!.getEmail(),0,"Result")
-        a=msgbox(str(#samlUser!.getRole()),0,"Result")
-        #htmlview!.destroy()
-       #postReturnAnswer()
-      
     methodend
     
 
